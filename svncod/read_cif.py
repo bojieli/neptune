@@ -18,6 +18,12 @@ def print_coord(l, element=''):
 	for coord in l:
 		print("\t" + element + "\t" + str(coord))
 
+def print_coord_cif(l, element=''):
+	cnt = 1
+	for coord in l:
+		print("\t" + element + str(cnt) + "\t" + "\t".join([ str(c) for c in coord]))
+		cnt += 1
+
 def transformation(site, rot):
 	return (rot[0] * site[0] + rot[1] * site[1] + rot[2] * site[2] + rot[9],
 		rot[3] * site[0] + rot[4] * site[1] + rot[5] * site[2] + rot[10],
@@ -86,6 +92,16 @@ def sites_mod_symmetry(group, sites):
 			break
 	return sites
 
+def sites_replicate_3(sites):
+	new_sites = []
+	for s in sites:
+		for i in range(-1,2):
+			for j in range(-1,2):
+				for k in range(-1,2):
+					new_sites.append(tuple([s[0]+i, s[1]+j, s[2]+k]))
+	return new_sites
+
+
 def get_all_elements(scas):
 	return set([ sca.element_symbol() for sca in scas ])
 def get_all_elements(scas):
@@ -143,6 +159,16 @@ def show_structure(s):
 		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
 		sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
 		print_coord(sym_sites_cart, e)
+	print("Fractional coordinates after all symmetry (mod 1): CIF format")
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+		print_coord_cif(sym_sites, e)
+	print("Fractional coordinates after all symmetry (mod 3): CIF format")
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		sym_sites = sites_replicate_3(sites_mod_symmetry(s.space_group(), list(sel.sites_frac())))
+		print_coord_cif(sym_sites, e)
 
 def show_model(m, maxnum=10):
 	cnt = 0
