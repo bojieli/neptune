@@ -62,6 +62,32 @@ def sites_after_symmetry(group, sites, valid_func):
 			break
 	return sites
 
+def module_one_coord(i):
+	while i < 0:
+		i += 1
+	while i > 1:
+		i -= 1
+	return i
+
+def module_one(s):
+	return tuple([ module_one_coord(i) for i in s ])
+
+def sites_mod_symmetry(group, sites):
+	sites = [ module_one(s) for s in sites ]
+	while True:
+		changed = False
+		for s in sites:
+			for x in group.all_ops():
+				rot = x.as_double_array()
+				new_site = module_one(transformation(s, rot))
+				if is_new(new_site, sites):
+					sites.append(new_site)
+		if not changed:
+			break
+	return sites
+
+def get_all_elements(scas):
+	return set([ sca.element_symbol() for sca in scas ])
 def get_all_elements(scas):
 	return set([ sca.element_symbol() for sca in scas ])
 
@@ -106,6 +132,17 @@ def show_structure(s):
 	#	sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
 	#	print_coord(sym_sites_cart, e)
 	#print("")
+	print("Fractional coordinates after all symmetry (mod 1): ")
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+		print_coord(sym_sites, e)
+	print("Cartesian coordinates after all symmetry (mod 1): ")
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+		sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
+		print_coord(sym_sites_cart, e)
 
 def show_model(m, maxnum=10):
 	cnt = 0
