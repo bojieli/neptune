@@ -1,6 +1,7 @@
 import sys
 from iotbx.file_reader import any_file
 import scitbx_array_family_flex_ext
+import json
 
 def show_space_group(g):
 	ret = ""
@@ -107,6 +108,18 @@ def get_all_elements(scas):
 def get_all_elements(scas):
 	return set([ sca.element_symbol() for sca in scas ])
 
+def get_symmetry_structure(s):
+	elements = get_all_elements(s.scatterers())
+	ns = s.customized_copy()
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+		sca = sel.scatterers()[0]
+		for coord in sym_sites:
+			sca.site = coord
+			ns.add_scatterer(sca)
+	return ns
+
 def show_structure(s):
 	print("Unit cell: " + str(s.unit_cell().parameters()))
 	print("Space group: " + show_space_group(s.space_group()))
@@ -124,18 +137,18 @@ def show_structure(s):
 		sel = s.select(s.element_selection(e))
 		print_coord(list(sel.sites_frac()), e)
 	print("")
-	print("Fractional coordinates after all symmetry (in unit cell): ")
-	for e in elements:
-		sel = s.select(s.element_selection(e))
-		sym_sites = sites_after_symmetry(s.space_group(), list(sel.sites_frac()), is_valid)
-		print_coord(sym_sites, e)
-	print("Cartesian coordinates after all symmetry: (in unit cell)")
-	for e in elements:
-		sel = s.select(s.element_selection(e))
-		sym_sites = sites_after_symmetry(s.space_group(), list(sel.sites_frac()), is_valid)
-		sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
-		print_coord(sym_sites_cart, e)
-	print("")
+	#print("Fractional coordinates after all symmetry (in unit cell): ")
+	#for e in elements:
+	#	sel = s.select(s.element_selection(e))
+	#	sym_sites = sites_after_symmetry(s.space_group(), list(sel.sites_frac()), is_valid)
+	#	print_coord(sym_sites, e)
+	#print("Cartesian coordinates after all symmetry: (in unit cell)")
+	#for e in elements:
+	#	sel = s.select(s.element_selection(e))
+	#	sym_sites = sites_after_symmetry(s.space_group(), list(sel.sites_frac()), is_valid)
+	#	sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
+	#	print_coord(sym_sites_cart, e)
+	#print("")
 	#print("Fractional coordinates after all symmetry (extend to 6 adjacent unit cells): ")
 	#for e in elements:
 	#	sel = s.select(s.element_selection(e))
@@ -148,27 +161,45 @@ def show_structure(s):
 	#	sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
 	#	print_coord(sym_sites_cart, e)
 	#print("")
+
+	ns = s.expand_to_p1(sites_mod_positive=True)
+
+	#ns = s.customized_copy()
+	#for e in elements:
+	#	sel = s.select(s.element_selection(e))
+	#	sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+	#	sca = sel.scatterers()[0]
+	#	for coord in sym_sites:
+	#		sca.site = coord
+	#		ns.add_scatterer(sca)
+
 	print("Fractional coordinates after all symmetry (mod 1): ")
 	for e in elements:
-		sel = s.select(s.element_selection(e))
-		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
-		print_coord(sym_sites, e)
-	print("Cartesian coordinates after all symmetry (mod 1): ")
-	for e in elements:
-		sel = s.select(s.element_selection(e))
-		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
-		sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
-		print_coord(sym_sites_cart, e)
-	print("Fractional coordinates after all symmetry (mod 1): CIF format")
-	for e in elements:
-		sel = s.select(s.element_selection(e))
-		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
-		print_coord_cif(sym_sites, e)
-	print("Fractional coordinates after all symmetry (mod 3): CIF format")
-	for e in elements:
-		sel = s.select(s.element_selection(e))
-		sym_sites = sites_replicate_3(sites_mod_symmetry(s.space_group(), list(sel.sites_frac())))
-		print_coord_cif(sym_sites, e)
+		sel = ns.select(ns.element_selection(e))
+		print_coord(list(sel.sites_frac()), e)
+
+	#print("Cartesian coordinates after all symmetry (mod 1): ")
+	#for e in elements:
+	#	sel = s.select(s.element_selection(e))
+	#	sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+	#	sym_sites_cart = [ s.unit_cell().orthogonalize(site) for site in sym_sites ]
+	#	print_coord(sym_sites_cart, e)
+
+	#print("Fractional coordinates after all symmetry (mod 1): CIF format")
+	#for e in elements:
+	#	sel = s.select(s.element_selection(e))
+	#	sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
+	#	print_coord_cif(sym_sites, e)
+	#print("Fractional coordinates after all symmetry (mod 3): CIF format")
+	#for e in elements:
+	#	sel = s.select(s.element_selection(e))
+	#	sym_sites = sites_replicate_3(sites_mod_symmetry(s.space_group(), list(sel.sites_frac())))
+	#	print_coord_cif(sym_sites, e)
+
+	print("CIF block: ")
+	print("===============================================")
+	print(ns.as_cif_block())
+	return ns
 
 def show_model(m, maxnum=10):
 	cnt = 0
@@ -183,14 +214,105 @@ def show_model(m, maxnum=10):
 		print("\t" + str(k) + ": " + val.strip())
 		cnt += 1
 
+def replace_cif_scatterers(old, new):
+	replaced = ""
+	lines = old.split("\n")
+	in_loop = False
+	reading_headers = False
+	skip_loop = False
+	header_count = 0
+	for line in lines:
+		if in_loop and not reading_headers:
+			if line.strip().startswith("_"):
+				in_loop = False
+			if line.strip() == "loop_":
+				in_loop = False
+
+		if in_loop and reading_headers:
+			if header_count == 0:
+				if line.strip().startswith("_atom_"):
+					skip_loop = True
+				if line.strip().startswith("_symmetry_"):
+					skip_loop = True
+
+				if not skip_loop:
+					replaced += "loop_" + "\n"
+			if not line.strip().startswith("_"):
+				# we are in data section
+				reading_headers = False
+			else:
+				header_count += 1
+
+		if in_loop and skip_loop:
+				continue
+
+		if line.startswith("_cell_"):
+			continue
+		if line.startswith("_symmetry_"):
+			continue
+		if line.strip() == "loop_":
+			in_loop = True
+			reading_headers = True
+			header_count = 0
+			skip_loop = False
+			continue
+
+		replaced += line + "\n"
+	replaced += new
+	return replaced
+
+def get_coord_frac(s, elements):
+	l = []
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		for site in list(sel.sites_frac()):
+			l.append((e, site))
+	return l
+
+def get_coord_cart(s, elements):
+	l = []
+	for e in elements:
+		sel = s.select(s.element_selection(e))
+		for site in list(sel.sites_cart()):
+			l.append((e, site))
+	return l
+
+def structure_json(name, s, ns, new_cif_block):
+	obj = {}
+	obj["name"] = name
+	obj["unit_cell"] = s.unit_cell().parameters()
+	obj["crystal_system"] = s.space_group().crystal_system()
+	obj["space_group"] = s.space_group().type().lookup_symbol()
+	obj["point_group"] = s.space_group().build_derived_point_group().type().lookup_symbol()
+
+	obj["scatterer_count"] = ns.sites_frac().size()
+	elements = get_all_elements(s.scatterers())
+	obj["element_list"] = list(elements)
+	obj["fractional_coordinates"] = get_coord_frac(ns, elements)
+	obj["cartesian_coordinates"]  = get_coord_cart(ns, elements)
+
+	obj["structures"] = [
+		{"cif": str(s), "type": "original"},
+		{"cif": new_cif_block,  "type": "symmetry"}
+	]
+	return json.dumps(obj)
+
+
+
 f = any_file(sys.argv[1])
 structures = f.file_content.build_crystal_structures()
 models = f.file_content.model()
 for s in structures:
-	print("=========================================")
-	print("Structure NO: " + s)
+	#print("=========================================")
+	#print("Structure name: " + s)
 	show_structure(structures[s])
-	print("")
-	maxnum = 20
-	print("Original CIF properties: (max " + str(maxnum) + ")")
-	show_model(models[s], maxnum)
+	ns = get_symmetry_structure(structures[s])
+	#print("")
+	#print("New CIF block:")
+	new_cif_block = replace_cif_scatterers(str(models[s]), str(ns.as_cif_block()))
+	#print(new_cif_block)
+	#print("JSON:")
+	json = structure_json(s, structures[s], ns, new_cif_block)
+	print(json)
+	#show_model(models[s], 1000)
+	
