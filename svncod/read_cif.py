@@ -332,7 +332,8 @@ def add_attrs(obj, m):
 def structure_json(name, s, ns, new_cif_block, attrs):
 	obj = {}
 	obj["name"] = "CY" + name
-	obj["unit_cell"] = s.unit_cell().parameters()
+	uc = s.unit_cell().parameters()
+	obj["unit_cell"] = {'a': uc[0], 'b': uc[1], 'c': uc[2], 'alpha': uc[3], 'beta': uc[4], 'gamma': uc[5]}
 	obj["crystal_system"] = s.space_group().crystal_system()
 	obj["space_group"] = s.space_group().type().lookup_symbol()
 	obj["point_group"] = s.space_group().build_derived_point_group().type().lookup_symbol()
