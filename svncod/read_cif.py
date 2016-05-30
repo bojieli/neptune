@@ -49,12 +49,12 @@ def is_valid_extended(site):
 			outside_dim = True
 	return True
 
-def is_new(new_site, sites):
+def is_new(new_site, sites, dist_thres):
 	for s in sites:
 		dist = 0
 		for i in range(0,3):
 			dist += (new_site[i] - s[i]) * (new_site[i] - s[i])
-		if dist < 1e-6:
+		if dist < dist_thres:
 			return False
 	return True
 
@@ -64,7 +64,7 @@ def sites_after_symmetry(group, orig_sites, valid_func):
 		for x in group.all_ops():
 			rot = x.as_double_array()
 			new_site = transformation(s, rot)
-			if valid_func(new_site) and is_new(new_site, sites):
+			if valid_func(new_site) and is_new(new_site, sites, 1e-6):
 				sites.append(new_site)
 	return sites
 
@@ -85,7 +85,7 @@ def sites_mod_symmetry(group, orig_sites):
 		for x in group.all_ops():
 			rot = x.as_double_array()
 			new_site = module_one(transformation(s, rot))
-			if is_new(new_site, sites):
+			if is_new(new_site, sites, 1e-6):
 				sites.append(new_site)
 	return sites
 
@@ -331,7 +331,10 @@ def add_attrs(obj, m):
 
 def structure_json(name, s, ns, new_cif_block, attrs):
 	obj = {}
-	obj["name"] = "CY" + name
+	obj["$type"] = "Crystal"
+	obj["$source"] = "COD"
+
+	obj["name"] = "COD" + name
 	uc = s.unit_cell().parameters()
 	obj["unit_cell"] = {'a': uc[0], 'b': uc[1], 'c': uc[2], 'alpha': uc[3], 'beta': uc[4], 'gamma': uc[5]}
 	obj["crystal_system"] = s.space_group().crystal_system()
