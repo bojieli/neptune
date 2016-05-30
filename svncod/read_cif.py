@@ -2,6 +2,8 @@ import sys
 from iotbx.file_reader import any_file
 import scitbx_array_family_flex_ext
 import json
+import os
+import fractions
 
 def show_space_group(g):
 	ret = ""
@@ -56,17 +58,14 @@ def is_new(new_site, sites):
 			return False
 	return True
 
-def sites_after_symmetry(group, sites, valid_func):
-	while True:
-		changed = False
-		for s in sites:
-			for x in group.all_ops():
-				rot = x.as_double_array()
-				new_site = transformation(s, rot)
-				if valid_func(new_site) and is_new(new_site, sites):
-					sites.append(new_site)
-		if not changed:
-			break
+def sites_after_symmetry(group, orig_sites, valid_func):
+	sites = list(orig_sites)
+	for s in orig_sites:
+		for x in group.all_ops():
+			rot = x.as_double_array()
+			new_site = transformation(s, rot)
+			if valid_func(new_site) and is_new(new_site, sites):
+				sites.append(new_site)
 	return sites
 
 def module_one_coord(i):
@@ -79,18 +78,15 @@ def module_one_coord(i):
 def module_one(s):
 	return tuple([ module_one_coord(i) for i in s ])
 
-def sites_mod_symmetry(group, sites):
-	sites = [ module_one(s) for s in sites ]
-	while True:
-		changed = False
-		for s in sites:
-			for x in group.all_ops():
-				rot = x.as_double_array()
-				new_site = module_one(transformation(s, rot))
-				if is_new(new_site, sites):
-					sites.append(new_site)
-		if not changed:
-			break
+def sites_mod_symmetry(group, orig_sites):
+	orig_sites = [ module_one(s) for s in orig_sites ]
+	sites = list(orig_sites)
+	for s in orig_sites:
+		for x in group.all_ops():
+			rot = x.as_double_array()
+			new_site = module_one(transformation(s, rot))
+			if is_new(new_site, sites):
+				sites.append(new_site)
 	return sites
 
 def sites_replicate_3(sites):
@@ -111,6 +107,7 @@ def get_all_elements(scas):
 def get_symmetry_structure(s):
 	elements = get_all_elements(s.scatterers())
 	ns = s.customized_copy()
+	ns.erase_scatterers()
 	for e in elements:
 		sel = s.select(s.element_selection(e))
 		sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
@@ -119,6 +116,26 @@ def get_symmetry_structure(s):
 			sca.site = coord
 			ns.add_scatterer(sca)
 	return ns
+
+def gen_formula(d):
+	f = ''
+	for k in d:
+		if int(d[k]) == 1:
+			f += k
+		else:
+			f += k + str(int(d[k]))
+	return f
+
+def simplify_formula(d):
+	curr_gcd = 0
+	for k in d:
+		if curr_gcd == 0:
+			curr_gcd = int(d[k])
+		else:
+			curr_gcd = fractions.gcd(curr_gcd, int(d[k]))
+	for k in d:
+		d[k] = int(d[k]) / curr_gcd
+	return d
 
 def show_structure(s):
 	print("Unit cell: " + str(s.unit_cell().parameters()))
@@ -135,7 +152,10 @@ def show_structure(s):
 	print("Cartesian coordinates: ")
 	for e in elements:
 		sel = s.select(s.element_selection(e))
-		print_coord(list(sel.sites_frac()), e)
+		print_coord(list(sel.sites_cart()), e)
+	print("")
+	print("Formula: " + gen_formula(s.unit_cell_content()))
+	print("Simplified Formula: " + gen_formula(simplify_formula(s.unit_cell_content())))
 	print("")
 	#print("Fractional coordinates after all symmetry (in unit cell): ")
 	#for e in elements:
@@ -164,15 +184,7 @@ def show_structure(s):
 
 	ns = s.expand_to_p1(sites_mod_positive=True)
 
-	#ns = s.customized_copy()
-	#for e in elements:
-	#	sel = s.select(s.element_selection(e))
-	#	sym_sites = sites_mod_symmetry(s.space_group(), list(sel.sites_frac()))
-	#	sca = sel.scatterers()[0]
-	#	for coord in sym_sites:
-	#		sca.site = coord
-	#		ns.add_scatterer(sca)
-
+	#ns = get_symmetry_structure(s)
 	print("Fractional coordinates after all symmetry (mod 1): ")
 	for e in elements:
 		sel = ns.select(ns.element_selection(e))
@@ -196,9 +208,9 @@ def show_structure(s):
 	#	sym_sites = sites_replicate_3(sites_mod_symmetry(s.space_group(), list(sel.sites_frac())))
 	#	print_coord_cif(sym_sites, e)
 
-	print("CIF block: ")
-	print("===============================================")
-	print(ns.as_cif_block())
+	#print("CIF block: ")
+	#print("===============================================")
+	#print(ns.as_cif_block())
 	return ns
 
 def show_model(m, maxnum=10):
@@ -277,42 +289,65 @@ def get_coord_cart(s, elements):
 			l.append((e, site))
 	return l
 
-def structure_json(name, s, ns, new_cif_block):
+
+def add_attrs(obj, m):
+	for k in m:
+		if not str(k).startswith("_"):
+			continue
+		if str(k).startswith("_atom_") or str(k).startswith("_symmetry_") or str(k).startswith("_cell_"):
+			continue
+		if isinstance(m[k], scitbx_array_family_flex_ext.std_string):
+			val = list(m[k])
+		else:
+			val = str(m[k]).strip()
+		obj[str(k)] = val
+
+def structure_json(name, s, ns, new_cif_block, attrs):
 	obj = {}
-	obj["name"] = name
+	obj["name"] = "CY" + name
 	obj["unit_cell"] = s.unit_cell().parameters()
 	obj["crystal_system"] = s.space_group().crystal_system()
 	obj["space_group"] = s.space_group().type().lookup_symbol()
 	obj["point_group"] = s.space_group().build_derived_point_group().type().lookup_symbol()
 
-	obj["scatterer_count"] = ns.sites_frac().size()
+	obj["scatterer_count"] = s.sites_frac().size()
+	obj["scatterer_count_after_symmetry"] = ns.sites_frac().size()
 	elements = get_all_elements(s.scatterers())
 	obj["element_list"] = list(elements)
+	obj["formula"] = gen_formula(s.unit_cell_content())
+	obj["simplified_formula"] = gen_formula(simplify_formula(s.unit_cell_content()))
+
 	obj["fractional_coordinates"] = get_coord_frac(ns, elements)
 	obj["cartesian_coordinates"]  = get_coord_cart(ns, elements)
 
 	obj["structures"] = [
-		{"cif": str(s), "type": "original"},
-		{"cif": new_cif_block,  "type": "symmetry"}
+		{"type": "CIF", "data": str(attrs), "processed": "original"},
+		{"type": "CIF", "data": new_cif_block, "processed": "visualize"}
 	]
+	add_attrs(obj, attrs)
 	return json.dumps(obj)
 
-
-
-f = any_file(sys.argv[1])
-structures = f.file_content.build_crystal_structures()
-models = f.file_content.model()
-for s in structures:
-	#print("=========================================")
-	#print("Structure name: " + s)
-	show_structure(structures[s])
-	ns = get_symmetry_structure(structures[s])
-	#print("")
-	#print("New CIF block:")
-	new_cif_block = replace_cif_scatterers(str(models[s]), str(ns.as_cif_block()))
-	#print(new_cif_block)
-	#print("JSON:")
-	json = structure_json(s, structures[s], ns, new_cif_block)
-	print(json)
-	#show_model(models[s], 1000)
+def export_json_from_file(file_path):
+	f = any_file(file_path)
+	structures = f.file_content.build_crystal_structures()
+	models = f.file_content.model()
+	jsons = []
+	for s in structures:
+		#print("=========================================")
+		#print("Structure name: " + s)
+		#show_structure(structures[s])
+		#sys.exit()
+		ns = get_symmetry_structure(structures[s])
+		#print("")
+		#print("New CIF block:")
+		new_cif_block = replace_cif_scatterers(str(models[s]), str(ns.as_cif_block()))
+		#print(new_cif_block)
+		#print("JSON:")
+		json = structure_json(s, structures[s], ns, new_cif_block, models[s])
+		jsons.append(json)
+		#show_model(models[s], 1000)
+	return jsons
 	
+if len(sys.argv) == 2:
+	if os.path.isfile(sys.argv[1]):
+		print(export_json_from_file(sys.argv[1])[0])
