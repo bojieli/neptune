@@ -262,6 +262,8 @@ def replace_cif_scatterers(old, new):
 			continue
 		if line.startswith("_symmetry_"):
 			continue
+		if line.startswith("_space_group_"):
+			continue
 		if line.strip() == "loop_":
 			in_loop = True
 			reading_headers = True
@@ -291,16 +293,41 @@ def get_coord_cart(s, elements):
 
 
 def add_attrs(obj, m):
+	omit_attrs = ["atom", "symmetry", "cell", "space_group", "geom", "[local]", "cod"]
 	for k in m:
 		if not str(k).startswith("_"):
 			continue
-		if str(k).startswith("_atom_") or str(k).startswith("_symmetry_") or str(k).startswith("_cell_"):
+		should_omit = False
+		for attr in omit_attrs:
+			if str(k).startswith('_' + attr + '_'):
+				should_omit = True
+		if should_omit:
 			continue
+
 		if isinstance(m[k], scitbx_array_family_flex_ext.std_string):
 			val = list(m[k])
 		else:
 			val = str(m[k]).strip()
-		obj[str(k)] = val
+
+		fields = str(k).split('_')
+		key_prefix = ''
+		obj_ref = obj
+		for f in range(1, len(fields)):
+			key = key_prefix + fields[f]
+			if f == len(fields) - 1:
+				if not key in obj_ref:
+					pass
+				elif isinstance(obj_ref[key], dict): # flatten
+					for x in obj_ref[key]:
+						obj_ref[key + '_' + x] = obj_ref[key][x]
+				obj_ref[key] = val
+			else:
+				if not key in obj_ref:
+					obj_ref[key] = {}
+				if isinstance(obj_ref[key], dict):
+					obj_ref = obj_ref[key]
+				else: # substr
+					key_prefix += key + '_'
 
 def structure_json(name, s, ns, new_cif_block, attrs):
 	obj = {}
@@ -317,8 +344,8 @@ def structure_json(name, s, ns, new_cif_block, attrs):
 	obj["formula"] = gen_formula(s.unit_cell_content())
 	obj["simplified_formula"] = gen_formula(simplify_formula(s.unit_cell_content()))
 
-	obj["fractional_coordinates"] = get_coord_frac(ns, elements)
-	obj["cartesian_coordinates"]  = get_coord_cart(ns, elements)
+	#obj["fractional_coordinates"] = get_coord_frac(ns, elements)
+	#obj["cartesian_coordinates"]  = get_coord_cart(ns, elements)
 
 	obj["structures"] = [
 		{"type": "CIF", "data": str(attrs), "processed": "original"},
