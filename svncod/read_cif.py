@@ -334,7 +334,9 @@ def structure_json(name, s, ns, new_cif_block, attrs):
 	obj["$type"] = "Crystal"
 	obj["$source"] = "COD"
 
-	obj["name"] = "COD" + name
+	obj["id"] = "COD" + name
+	obj["key"] = "COD" + name
+
 	uc = s.unit_cell().parameters()
 	obj["unit_cell"] = {'a': uc[0], 'b': uc[1], 'c': uc[2], 'alpha': uc[3], 'beta': uc[4], 'gamma': uc[5]}
 	obj["crystal_system"] = s.space_group().crystal_system()
@@ -356,7 +358,7 @@ def structure_json(name, s, ns, new_cif_block, attrs):
 		{"type": "CIF", "data": new_cif_block, "processed": "visualize"}
 	]
 	add_attrs(obj, attrs)
-	return json.dumps(obj)
+	return obj
 
 def export_json_from_file(file_path):
 	f = any_file(file_path)
@@ -381,4 +383,4 @@ def export_json_from_file(file_path):
 	
 if len(sys.argv) == 2:
 	if os.path.isfile(sys.argv[1]):
-		print(export_json_from_file(sys.argv[1])[0])
+		print(json.dumps(export_json_from_file(sys.argv[1])[0]))

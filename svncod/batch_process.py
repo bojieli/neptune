@@ -3,6 +3,7 @@ import sys
 import traceback
 from read_cif import export_json_from_file
 import time
+import json
 
 walk_dir = sys.argv[1]
 
@@ -25,8 +26,8 @@ for root, subdirs, files in os.walk(walk_dir):
 	try:
 		outf = open(outpath, 'w')
 		jsons = export_json_from_file(inpath)
-		for json in jsons:
-			outf.write(json)
+		for j in jsons:
+			outf.write(json.dumps(j))
 		outf.close()
 	except:
 		traceback.print_exc()
