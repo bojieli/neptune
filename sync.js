@@ -3,16 +3,20 @@ var request = require('request')
   , es = require('event-stream')
   , elasticsearch = require('elasticsearch')
 
-var db = 'http://localhost:5984/moldb'
+var db = 'http://localhost:5984/moldb2'
+var since_number = 0
 var es_client = new elasticsearch.Client({host: 'localhost:9200'})
+var index_name = "molecule3"
 var max_in_flight_reqs = 100
 var curr_in_flight_reqs = 0
 var is_bulk_in_flight = false
 var bulk_buffer = []
 
-request({url: db + '/_changes?since=7682000'})
-  .pipe(JSONStream.parse('results.*'))
-  .pipe(es.mapSync((data) => { return data.id }))
+request({url: db + '/_changes?feed=continuous&since=' + since_number })
+  //.pipe(JSONStream.parse('results.*'))
+  .pipe(es.split()) // by line
+  .pipe(es.mapSync((line) => JSON.parse(line)))
+  .pipe(es.mapSync((data) => data.id ))
   .pipe(es.through(function write(id) {
     curr_in_flight_reqs += 1
     if (curr_in_flight_reqs >= max_in_flight_reqs)
@@ -29,7 +33,7 @@ request({url: db + '/_changes?since=7682000'})
           var bulk_body = []
           bulk_buffer.forEach((doc) => {
              this.emit('data', doc.id + "\n")
-             bulk_body.push({"index":{"_id": doc.id,"_index":"molecule2","_type":"molecule","_routing":null}}),
+             bulk_body.push({"index":{"_id": doc.id, "_index":index_name, "_type": doc["$type"], "_routing":null}}),
              bulk_body.push({"doc": doc })
           })
           bulk_buffer = []
