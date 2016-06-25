@@ -4,17 +4,26 @@ var request = require('request')
   , elasticsearch = require('elasticsearch')
   , fs = require('fs')
 
-var db = 'http://localhost:5984/moldb2'
+if (process.argv.length != 4) {
+    throw "Usage: node sync.js <dbname> <index_name>";
+}
+
+var dbhost = 'http://localhost:5984'
+var dbname = process.argv[2]
+var db = dbhost + '/' + dbname
 var es_client = new elasticsearch.Client({host: 'localhost:9200'})
-var index_name = "molecule3"
+var index_name = process.argv[3]
 var max_in_flight_reqs = 100
 var curr_in_flight_reqs = 0
 var is_bulk_in_flight = false
 var bulk_buffer = []
 
+var couchdb_seq_file = '.couchdb_seq_' + dbname
 var since_number = 0
 try {
-	since_number = fs.readFileSync('.couchdb_seq')
+	since_number = parseInt(fs.readFileSync(couchdb_seq_file))
+	if (isNaN(since_number))
+		since_number = 0
 } catch(e) {
 	console.log(e)
 }
@@ -41,8 +50,8 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
           // flush bulk buffer
           var bulk_body = []
           bulk_buffer.forEach((doc) => {
-             this.emit('data', doc.id + "\n")
-             bulk_body.push({"index":{"_id": doc.id, "_index":index_name, "_type": doc["$type"], "_routing":null}}),
+             this.emit('data', doc._id + "\n")
+             bulk_body.push({"index":{"_id": doc._id, "_index":index_name, "_type": doc["$type"], "_routing":null}}),
              bulk_body.push({"doc": doc })
           })
           bulk_buffer = []
@@ -51,7 +60,7 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
           es_client.bulk({ body: bulk_body }, (err, resp) => { 
              if (err)
                console.log(err)
-             fs.writeFile(".couchdb_seq", seq)
+             fs.writeFile(couchdb_seq_file, seq)
              is_bulk_in_flight = false
              if (this.paused)
                this.resume()
