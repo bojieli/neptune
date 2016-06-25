@@ -25,6 +25,9 @@ for root, subdirs, files in os.walk(walk_dir):
 	try:
 		jsons = export_json_from_file(inpath)
 		for json in jsons:
+			# update must use previous _rev
+			if json['id'] in db:
+				json['_rev'] = db[json['id']]['_rev']
 			db[json['id']] = json
 	except:
 		traceback.print_exc()
