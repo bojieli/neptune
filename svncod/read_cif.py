@@ -357,9 +357,10 @@ def structure_json(name, s, ns, new_cif_block, attrs):
 	#obj["fractional_coordinates"] = get_coord_frac(ns, elements)
 	#obj["cartesian_coordinates"]  = get_coord_cart(ns, elements)
 
+	old_cif_block = str(attrs)
 	obj["structures"] = [
-		{"type": "CIF", "data": str(attrs), "processed": "original"},
-		{"type": "CIF", "data": new_cif_block, "processed": "visualize"}
+		{"type": "CIF", "data": old_cif_block, "processed": "original",  "size": len(old_cif_block) },
+		{"type": "CIF", "data": new_cif_block, "processed": "visualize", "size": len(new_cif_block) }
 	]
 	add_attrs(obj, attrs, maxdepth=2)
 	return obj
