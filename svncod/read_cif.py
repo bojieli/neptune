@@ -292,7 +292,7 @@ def get_coord_cart(s, elements):
 	return l
 
 
-def add_attrs(obj, m):
+def add_attrs(obj, m, maxdepth=0):
 	omit_attrs = ["atom", "symmetry", "cell", "space_group", "geom", "[local]", "cod"]
 	for k in m:
 		if not str(k).startswith("_"):
@@ -309,7 +309,11 @@ def add_attrs(obj, m):
 		else:
 			val = str(m[k]).strip()
 
-		fields = str(k).split('_')
+		if maxdepth <= 0:
+			fields = str(k).split('_')
+		else:
+			fields = str(k).split('_', maxdepth)
+
 		key_prefix = ''
 		obj_ref = obj
 		for f in range(1, len(fields)):
@@ -357,7 +361,7 @@ def structure_json(name, s, ns, new_cif_block, attrs):
 		{"type": "CIF", "data": str(attrs), "processed": "original"},
 		{"type": "CIF", "data": new_cif_block, "processed": "visualize"}
 	]
-	add_attrs(obj, attrs)
+	add_attrs(obj, attrs, maxdepth=2)
 	return obj
 
 def export_json_from_file(file_path):
