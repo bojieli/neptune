@@ -293,7 +293,7 @@ def get_coord_cart(s, elements):
 
 
 def add_attrs(obj, m, maxdepth=0):
-	omit_attrs = ["atom", "symmetry", "cell", "space_group", "geom", "[local]", "cod"]
+	omit_attrs = ["atom", "symmetry", "cell", "space_group", "geom", "shelx", "[local]", "cod"]
 	for k in m:
 		if not str(k).startswith("_"):
 			continue
