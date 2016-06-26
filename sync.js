@@ -36,6 +36,9 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
   .pipe(es.through(function write(record) {
     var seq = record.seq
     var id = record.id
+    if (dbname == 'moldb3' && seq <= 7875823 && id.startsWith('COD')) {
+      return;
+    }
     curr_in_flight_reqs += 1
     if (curr_in_flight_reqs >= max_in_flight_reqs)
       this.pause()
@@ -50,7 +53,6 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
           // flush bulk buffer
           var bulk_body = []
           bulk_buffer.forEach((doc) => {
-             this.emit('data', doc._id + "\n")
              bulk_body.push({"index":{"_id": doc._id, "_index":index_name, "_type": doc["$type"], "_routing":null}}),
              bulk_body.push({"doc": doc })
           })
@@ -59,8 +61,23 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
           is_bulk_in_flight = true
           es_client.bulk({ body: bulk_body }, (err, resp) => { 
              if (err)
-               console.log(err)
-             fs.writeFile(couchdb_seq_file, seq)
+	       throw err
+             try {
+               if (resp.errors) {
+                 //console.log("elasticsearch bulk update error: " + JSON.stringify(resp))
+                 resp.items.forEach((item) => {
+                   if (item.index.status != 200) {
+	             console.log("Update failed [" + item.index._id + "]: " + JSON.stringify(item.index))
+	           }
+                 })
+               }
+               id_list = resp.items.map((item) => item.index._id)
+               this.emit('data', "Update batch size " + id_list.length + " took " + resp.took + "ms, seq " + seq + ", IDs: " + id_list.join(',') + "\n")
+               fs.writeFile(couchdb_seq_file, seq)
+             } catch(e) {
+               console.log(e)
+             }
+
              is_bulk_in_flight = false
              if (this.paused)
                this.resume()
@@ -68,8 +85,8 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
         }
       }
       else {
-        console.log(err)
-        console.log(res)
+        console.log("CouchDB error: " + err)
+        console.log("CouchDB error HTTP response: " + res)
       }
     })
   }))
