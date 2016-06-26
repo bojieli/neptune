@@ -91,8 +91,8 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
           flush_bulk_buffer.call(this)
       }
       else {
-        console.log("CouchDB error: " + err)
-        console.log("CouchDB error HTTP response: " + res)
+        console.log("CouchDB error: " + JSON.stringify(err))
+        console.log("CouchDB error HTTP response: " + JSON.stringify(res))
       }
     })
   }))
