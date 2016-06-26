@@ -8,3 +8,5 @@ docker run -d --net=couchdb-net --net-alias=couchdb_master -p 127.0.0.1:5984:598
 docker run -d --net=couchdb-net --net-alias=elastic -p 127.0.0.1:9200:9200 -p 127.0.0.1:9300:9300 -v /var/lib/elastic_config:/usr/share/elasticsearch/config -v /var/lib/elastic_data:/usr/share/elasticsearch/data --name elastic elasticsearch
 # start logstash
 docker run -d --net=couchdb-net --net-alias=logstash -v /var/lib/logstash_config:/config-dir --name logstash logstash-large logstash -f /config-dir/logstash.conf
+
+docker run -d --net=couchdb-net --net-alias=webserver -p 127.0.0.1:3000:3000 -v /var/mat-gene:/var/mat-gene --name webserver mat-gene
