@@ -1,0 +1,23 @@
+server {
+	listen 80 default_server;
+
+	server_name localhost;
+	
+	location / {
+		proxy_pass http://127.0.0.1:3000;
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $remote_addr;
+	}
+
+	location /static {
+		alias /var/mat-gene/static;
+		autoindex off;
+	}
+
+	location /data {
+		alias /var/data;
+		index index.html;
+		autoindex off;
+		try_files $uri $uri/ =404;
+	}
+}
