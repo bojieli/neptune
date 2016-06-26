@@ -27,16 +27,54 @@ try {
 } catch(e) {
 	console.log(e)
 }
+var global_max_seq = since_number
 console.log("Starting syncing from " + db + " since sequence number " + since_number)
+
+function flush_bulk_buffer() {
+  var bulk_body = []
+  bulk_buffer.forEach((doc) => {
+     bulk_body.push({"index":{"_id": doc._id, "_index":index_name, "_type": doc["$type"], "_routing":null}}),
+     bulk_body.push({"doc": doc })
+  })
+  bulk_buffer = []
+
+  is_bulk_in_flight = true
+  es_client.bulk({ body: bulk_body }, (err, resp) => { 
+     if (err)
+       throw err
+     try {
+       if (resp.errors) {
+         //console.log("elasticsearch bulk update error: " + JSON.stringify(resp))
+         resp.items.forEach((item) => {
+           if (item.index.status != 200) {
+             console.log("Update failed [" + item.index._id + "]: " + JSON.stringify(item.index))
+           }
+         })
+       }
+       id_list = resp.items.map((item) => item.index._id)
+       this.emit('data', "Update batch size " + id_list.length + " took " + resp.took + "ms, seq " + global_max_seq + ", IDs: " + id_list.join(',') + "\n")
+       if (global_max_seq > 0)
+         fs.writeFile(couchdb_seq_file, global_max_seq)
+     } catch(e) {
+       console.log(e)
+     }
+
+     is_bulk_in_flight = false
+     if (bulk_buffer.length > 0)
+       flush_bulk_buffer.call(this)
+     if (this.paused)
+       this.resume()
+  })
+}
 
 request({url: db + '/_changes?feed=continuous&since=' + since_number })
   //.pipe(JSONStream.parse('results.*'))
   .pipe(es.split()) // by line
   .pipe(es.mapSync((line) => JSON.parse(line)))
   .pipe(es.through(function write(record) {
-    var seq = record.seq
+    global_max_seq = record.seq
     var id = record.id
-    if (dbname == 'moldb3' && seq <= 7875823 && id.startsWith('COD')) {
+    if (dbname == 'moldb3' && global_max_seq <= 7875823 && id.startsWith('COD')) {
       return;
     }
     curr_in_flight_reqs += 1
@@ -49,40 +87,8 @@ request({url: db + '/_changes?feed=continuous&since=' + since_number })
         var doc = JSON.parse(body)
 
         bulk_buffer.push(doc)
-        if (!is_bulk_in_flight) {
-          // flush bulk buffer
-          var bulk_body = []
-          bulk_buffer.forEach((doc) => {
-             bulk_body.push({"index":{"_id": doc._id, "_index":index_name, "_type": doc["$type"], "_routing":null}}),
-             bulk_body.push({"doc": doc })
-          })
-          bulk_buffer = []
-
-          is_bulk_in_flight = true
-          es_client.bulk({ body: bulk_body }, (err, resp) => { 
-             if (err)
-	       throw err
-             try {
-               if (resp.errors) {
-                 //console.log("elasticsearch bulk update error: " + JSON.stringify(resp))
-                 resp.items.forEach((item) => {
-                   if (item.index.status != 200) {
-	             console.log("Update failed [" + item.index._id + "]: " + JSON.stringify(item.index))
-	           }
-                 })
-               }
-               id_list = resp.items.map((item) => item.index._id)
-               this.emit('data', "Update batch size " + id_list.length + " took " + resp.took + "ms, seq " + seq + ", IDs: " + id_list.join(',') + "\n")
-               fs.writeFile(couchdb_seq_file, seq)
-             } catch(e) {
-               console.log(e)
-             }
-
-             is_bulk_in_flight = false
-             if (this.paused)
-               this.resume()
-          })
-        }
+        if (!is_bulk_in_flight)
+          flush_bulk_buffer.call(this)
       }
       else {
         console.log("CouchDB error: " + err)
